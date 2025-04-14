@@ -12,5 +12,5 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/viper v1.3.2
 	github.com/stretchr/objx v0.5.2 // indirect
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.35.0
 )
