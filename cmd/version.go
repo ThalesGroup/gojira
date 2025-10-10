@@ -34,6 +34,6 @@ var versionCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "usage: gojira version")
 			os.Exit(1)
 		}
-		fmt.Println("gojira version: v1.6.0")
+		fmt.Println("gojira version: v1.7.0")
 	},
 }

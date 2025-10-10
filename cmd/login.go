@@ -21,17 +21,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/howeyc/gopass"
 	"github.com/spf13/viper"
-
-	jira "github.com/andygrunwald/go-jira"
+	"github.com/andygrunwald/go-jira"
 	"github.com/danieljoos/wincred"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
-var gojiraCredentialsName = "gojira"
-var gojiraAuthTransport = ""
+var (
+	gojiraCredentialsName = "gojira"
+)
 
 func init() {
 	rootCmd.AddCommand(loginCmd)
@@ -42,10 +41,10 @@ func init() {
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Create wincred credential to authenticate to a dedicated Jira Server / Project via Basic Authentication.",
-	Long:  `Create wincred credential to authenticate to a dedicated Jira Server / Project.via Basic Authentication.`,
+	Long:  `Create wincred credential to authenticate to a dedicated Jira Server / Project via Basic Authentication.`,
 	Run: func(cmd *cobra.Command, args []string) {
-
-		gojiraAuthTransport = "basic"
+		viper.Set("gojiraAuthTransport", "basic")
+		viper.WriteConfig()
 		loginToJira()
 	},
 }
@@ -55,156 +54,266 @@ var loginTokenCmd = &cobra.Command{
 	Short: "Create wincred credential to authenticate to a dedicated Jira Server / Project via Bearer Token.",
 	Long:  `Create wincred credential to authenticate to a dedicated Jira Server / Project via Bearer Token.`,
 	Run: func(cmd *cobra.Command, args []string) {
-
-		gojiraAuthTransport = "bearer"
+		viper.Set("gojiraAuthTransport", "bearer")
+		viper.WriteConfig()
 		loginToJira()
 	},
 }
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
-	Short: "Delete wincred credential to aunthenticate to a dedicated Jira Server / Project.",
-	Long:  `Delete wincred credential to aunthenticate to a dedicated Jira Server / Project.`,
+	Short: "Delete wincred credential to authenticate to a dedicated Jira Server / Project.",
+	Long:  `Delete wincred credential to authenticate to a dedicated Jira Server / Project.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Deleting '%s' credential from wincred ... \n", gojiraCredentialsName)
 		cred, err := wincred.GetGenericCredential(gojiraCredentialsName)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Fprintf(os.Stderr, "Error retrieving credential: %v\n", err)
 			return
 		}
-		cred.Delete()
+		if err := cred.Delete(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error deleting credential: %v\n", err)
+			return
+		}
+		fmt.Println("Credential deleted successfully.")
 	},
 }
 
-func loginToJira() *jira.Client {
+func readSecureInput(prompt string, sensitive bool) (string, error) {
+	for {
+		fmt.Print(prompt)
+		var input string
+		var err error
 
-    var client *jira.Client
-    var username string
-
-	cred, err := wincred.GetGenericCredential(gojiraCredentialsName)
-	if err == nil {
-		// fmt.Printf("Logging as : %s\n", cred.Credential.UserName)
-        if len(cred.Credential.UserName) == 0 {
-            return createJiraClientToken(string(cred.Attributes[0].Value), string(cred.CredentialBlob))
-        } else {
-		    return createJiraClient(string(cred.Attributes[0].Value), cred.Credential.UserName, string(cred.CredentialBlob))
-        }
-	} else {
-		//Create the credential
-		r := bufio.NewReader(os.Stdin)
-
-		fmt.Print("Jira URL: ")
-		jiraURL, _ := r.ReadString('\n')
-		jiraURL = strings.TrimSuffix(jiraURL, "\n")
-		jiraURL = strings.TrimSuffix(jiraURL, "\r")
-
-        if gojiraAuthTransport == "basic" {
-            fmt.Print("Jira Username: ")
-            username, _ = r.ReadString('\n')
-            username = strings.TrimSuffix(username, "\n")
-            username = strings.TrimSuffix(username, "\r")
-            fmt.Print("Jira Password: ")
-        } else{
-		    fmt.Print("Jira Personal Access Token: ")
-        }
-
-		password, _ := gopass.GetPasswd()
-		cred := wincred.NewGenericCredential(gojiraCredentialsName)
-		cred.CredentialBlob = password
-
-        if gojiraAuthTransport == "basic" {
-            cred.UserName = username
-		    client = createJiraClient(jiraURL, cred.Credential.UserName, string(cred.CredentialBlob))
-        } else{
-		    client = createJiraClientToken(jiraURL, string(cred.CredentialBlob))
-        }
-
-		// client.Board.GetAllBoards
-
-		credAttributes := []wincred.CredentialAttribute{
-			wincred.CredentialAttribute{
-				"jiraUrl",
-				[]byte(jiraURL),
-			},
+		if sensitive {
+			// Read sensitive input (no echo) for passwords/tokens.
+			byteInput, err := term.ReadPassword(int(syscall.Stdin))
+			if err != nil {
+				fmt.Printf("\nError reading input: %v\n", err)
+				continue
+			}
+			input = strings.TrimSpace(string(byteInput))
+		} else {
+			// Read non-sensitive input (echoed) for URL/username.
+			reader := bufio.NewReader(os.Stdin)
+			input, err = reader.ReadString('\n')
+			if err != nil {
+				fmt.Printf("\nError reading input: %v\n", err)
+				continue
+			}
+			input = strings.TrimSpace(input) // Handles \n, \r for Windows/Linux.
 		}
 
-		cred.Attributes = credAttributes
-		cred.Persist = wincred.PersistEnterprise
-
-		err := cred.Write()
-
-		if err != nil {
-			fmt.Println(err)
+		if len(input) == 0 {
+			fmt.Println("\nInput cannot be empty. Please try again.")
+			continue
 		}
 
-        if gojiraAuthTransport == "basic" {
-		    viper.Set("username", username)
-        }
-		viper.Set("jira_url", jiraURL)
-		viper.WriteConfig()
-		fmt.Printf("Jira account was successfully logged on!")
-
-		return client
+		if sensitive {
+			fmt.Printf("\nInput captured successfully (length: %d characters).\n", len(input))
+		}
+		return input, nil
 	}
 }
 
+func loginToJira() *jira.Client {
+	var client *jira.Client
+	var username string
+
+	cred, err := wincred.GetGenericCredential(gojiraCredentialsName)
+	if err == nil {
+		if viper.GetString("gojiraAuthTransport") == "bearer" {
+			fmt.Printf("Using stored token for Jira URL: %s\n", string(cred.Attributes[0].Value))
+			client = createJiraClientToken(string(cred.Attributes[0].Value), string(cred.CredentialBlob))
+			username = cred.UserName // Use stored username
+		} else {
+			fmt.Printf("Using stored credentials for Jira URL: %s, Username: %s\n", string(cred.Attributes[0].Value), cred.UserName)
+			client = createJiraClient(string(cred.Attributes[0].Value), cred.UserName, string(cred.CredentialBlob))
+			username = cred.UserName
+		}
+		if client != nil {
+			// Validate authentication
+			user, _, err := client.User.GetSelf()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Authenticated as: %s\n", user.Name)
+			// Ensure username is valid for reporter
+			if username != "" {
+				_, _, err = client.User.Get(username)
+				if err != nil {
+					//fmt.Fprintf(os.Stderr, "Stored username '%s' is invalid: %v\n", username, err)
+					username = "" // Prompt for new username
+				}
+			}
+			if username == "" {
+				username = user.Name
+				cred.UserName = username
+				if err := cred.Write(); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to update credentials: %v\n", err)
+					os.Exit(1)
+				}
+				viper.Set("username", username)
+				if err := viper.WriteConfig(); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
+					os.Exit(1)
+				}
+			}
+			return client
+		}
+	}
+
+	// Create new credential
+	fmt.Printf("Creating new credential\n")
+	jiraURL, err := readSecureInput("Jira URL: ", false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read Jira URL: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Prompt for username in both basic and bearer modes
+	username, err = readSecureInput("Jira Username: ", false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read username: %v\n", err)
+		os.Exit(1)
+	}
+
+	password, err := readSecureInput("Jira "+ternary(viper.GetString("gojiraAuthTransport") == "basic", "Password", "Personal Access Token")+": ", true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read %s: %v\n", ternary(viper.GetString("gojiraAuthTransport") == "basic", "password", "token"), err)
+		os.Exit(1)
+	}
+
+	cred = wincred.NewGenericCredential(gojiraCredentialsName)
+	cred.CredentialBlob = []byte(password)
+	cred.UserName = username // Store username for both auth types
+
+	if viper.GetString("gojiraAuthTransport") == "basic" {
+		client = createJiraClient(jiraURL, username, string(cred.CredentialBlob))
+	} else {
+		client = createJiraClientToken(jiraURL, string(cred.CredentialBlob))
+	}
+
+	if client == nil {
+		fmt.Fprintf(os.Stderr, "Failed to create Jira client\n")
+		os.Exit(1)
+	}
+
+	// Validate authentication and username
+	user, _, err := client.User.GetSelf()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Authenticated as: %s\n", user.Name)
+
+	// Validate username
+	_, _, err = client.User.Get(username)
+	if err != nil {
+		//fmt.Fprintf(os.Stderr, "Invalid username '%s': %v\n", username, err)
+		//fmt.Printf("Using authenticated user: %s\n", user.Name)
+		username = user.Name
+		cred.UserName = username
+	}
+
+	credAttributes := []wincred.CredentialAttribute{
+		{
+			Keyword: "jiraUrl",
+			Value:   []byte(jiraURL),
+		},
+	}
+	cred.Attributes = credAttributes
+	cred.Persist = wincred.PersistEnterprise
+
+	if err := cred.Write(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to store credentials: %v\n", err)
+		os.Exit(1)
+	}
+
+	viper.Set("username", username)
+	viper.Set("jira_url", jiraURL)
+	if err := viper.WriteConfig(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Jira account was successfully logged on!")
+	return client
+}
+
 func createJiraClient(jiraURL, username, password string) *jira.Client {
-
-	r := bufio.NewReader(os.Stdin)
-
 	if len(jiraURL) == 0 {
-		fmt.Print("Jira URL: ")
-		jiraURL, _ = r.ReadString('\n')
+		var err error
+		jiraURL, err = readSecureInput("Jira URL: ", false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read Jira URL: %v\n", err)
+			return nil
+		}
 	}
 	if len(username) == 0 {
-		fmt.Print("Jira Username: ")
-		username, _ = r.ReadString('\n')
+		var err error
+		username, err = readSecureInput("Jira Username: ", false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read username: %v\n", err)
+			return nil
+		}
 	}
-
 	if len(password) == 0 {
-		fmt.Print("Jira Password: ")
-		bytePassword, _ := terminal.ReadPassword(int(syscall.Stdin))
-		password = string(bytePassword)
+		var err error
+		password, err = readSecureInput("Jira Password: ", true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read password: %v\n", err)
+			return nil
+		}
 	}
-
+	fmt.Printf("Creating Jira client with username: %s\n", username)
 	tp := jira.BasicAuthTransport{
 		Username: strings.TrimSpace(username),
 		Password: strings.TrimSpace(password),
 	}
 
-	jiraClient, err := jira.NewClient(tp.Client(), jiraURL)
+	jiraClient, err := jira.NewClient(tp.Client(), strings.TrimSpace(jiraURL))
 	if err != nil {
-		fmt.Printf("Error while creating Jira Client : %s\n", err)
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Error while creating Jira Client: %v\n", err)
+		return nil
 	}
-
 	return jiraClient
 }
 
 func createJiraClientToken(jiraURL, password string) *jira.Client {
-
-	r := bufio.NewReader(os.Stdin)
-
 	if len(jiraURL) == 0 {
-		fmt.Print("Jira URL: ")
-		jiraURL, _ = r.ReadString('\n')
+		var err error
+		jiraURL, err = readSecureInput("Jira URL: ", false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read Jira URL: %v\n", err)
+			return nil
+		}
 	}
-
 	if len(password) == 0 {
-		fmt.Print("Jira Personal Access Token: ")
-		bytePassword, _ := terminal.ReadPassword(int(syscall.Stdin))
-		password = string(bytePassword)
+		var err error
+		password, err = readSecureInput("Jira Personal Access Token: ", true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read token: %v\n", err)
+			return nil
+		}
 	}
 
 	tp := jira.BearerAuthTransport{
 		Token: strings.TrimSpace(password),
 	}
 
-	jiraClient, err := jira.NewClient(tp.Client(), jiraURL)
+	jiraClient, err := jira.NewClient(tp.Client(), strings.TrimSpace(jiraURL))
 	if err != nil {
-		fmt.Printf("Error while creating Jira Client : %s\n", err)
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Error while creating Jira Client: %v\n", err)
+		return nil
 	}
-
 	return jiraClient
+}
+
+func ternary(condition bool, trueVal, falseVal string) string {
+	if condition {
+		return trueVal
+	}
+	return falseVal
 }

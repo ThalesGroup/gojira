@@ -5,7 +5,7 @@
 
 ## What is GoJira ?
 
-GoJira is a Go tool designed to enhance and expedite the use of Jira, a popular management software.
+GoJira is a Go tool designed to streamline and enhance the use of Jira, a popular project management software.
 This version of GoJira focuses on enabling Definition of Done (DoD) injection.
 
 ## How to install GoJira ?
@@ -13,12 +13,12 @@ This version of GoJira focuses on enabling Definition of Done (DoD) injection.
 #### Download binary
 
 * Visit the [Releases page](https://github.com/jurocknsail/gojira/releases/latest) to access the latest GoJira release.
-* Copy the executable file to a directory included in your system's PATH
-* The executable file will be named as gojira-version-type+platform.arch.exe. For ease of use, rename it to "gojira.exe".
+* Copy the executable file to a directory in your system's PATH environment variable.
+* For ease of use, the executable file should be renamed to "gojira.exe".
 
 #### Verify the Executable
 
-Verify the executable installation by opening your preferred command-line interface (CLI) and entering the command "gojira". You should see output similar to the following:
+Verify the installation by opening your preferred command-line interface (CLI) and running the command "gojira". You should see output similar to the following:
 
 ```shell
 $ gojira.exe
@@ -46,12 +46,12 @@ Flags:
 Use "gojira [command] --help" for more information about a command.
 
 ```
-If you see the above output, the installation is complete.
-Otherwise, double-check that you placed the gojira.exe file in the correct directory and correctly added it to your system's PATH variable. 
+If you see the expected above output, the installation is complete.
+Otherwise, ensure that you placed the gojira.exe file in a directory included in your system's PATH environment variable and added it correctly.
 
 #### Configure gojira
 
-* Create Jira credentials: Set up your Jira credentials once to establish authentication.
+* Set up Jira credentials: Configure your Jira credentials for authentication using gojira.exe login or gojira.exe tokenlogin.
 
 ```shell
 $ gojira.exe login
@@ -62,15 +62,21 @@ Jira account was successfully logged on!
 ```
 ```shell
 $ gojira.exe tokenlogin
-Jira URL: https://jira.gemalto.com
+Creating new credential
+Jira URL: https://jira.url.com
+Jira Username: bob
 Jira Personal Access Token:
+Input captured successfully (length: XX characters).
+Authenticated as: bob
 Jira account was successfully logged on!
 ```
 
-* Configure the Jira Project: Specify the Jira Project that you want to work with using GoJira.
+* Configure the Jira Project: Specify the Jira project key that you want to work with using GoJira.
 
 ```shell
 $ gojira.exe config project "<MY_PROJECT_NAME>"
+Using stored token for Jira URL: https://jira.url.com
+Authenticated as: bob
 Several boards matching, please pick one by ID.
 Board : {XXXXX https://jira.url.com/rest/agile/1.0/board/XXXXX MY_PROJECT_NAME scrum 0}
 Board : {YYYYY https://jira.url.com/rest/agile/1.0/board/YYYYY OTHER_PROJECT_NAME scrum 0}
@@ -78,19 +84,23 @@ Selected Board ID: XXXXX
 Board selected!
 ```
 
-* Configure the Jira Project ID: You can also specify the Jira Project ID (if you have it) that you want to work with using GoJira.
+* Configure the Jira Project ID: Optionally, specify the numeric project ID (if known).
 
 ```shell
 $ gojira.exe config projectId <MY_PROJECT_ID>
+Using stored token for Jira URL: https://jira.url.com
+Authenticated as: bob
 Board selected!
 Board ID: XXXXX
 Board Name: MY_PROJECT_NAME
 ```
 
-* Configure the desired sprint: Specify the GoJira configuration to use the desired sprint in the selected project. (Note: This configuration can be updated later by reusing the same command and selecting another sprint.)
+* Configure the sprint: Select the active sprint for the project. You can update this later by running the same command with a different sprint ID.
 
 ```shell
 $ gojira.exe config sprint
+Using stored token for Jira URL: https://jira.url.com
+Authenticated as: bob
  Sprint ID : AAAAA : Sprint 1
  ...
  Sprint ID : CCCCC : Sprint 3
@@ -100,13 +110,14 @@ Please input desired sprint ID: CCCCC
 
 #### Functionalities
 
-##### List of User Stories
+##### List User Stories
 
-* It is possible to list all User Stories (US) present in the selected sprint, for example in order to select some we need to modify using another gojira command.
+* List all User Stories (US) in the selected sprint to identify those you want to modify with other gojira command.
 
 ```shell
 $ gojira.exe stories
- 
+Using stored token for Jira URL: https://jira.url.com
+Authenticated as: bob
 Stories/Bugs in selected sprint :
  PROJ-DDDDD | Story  | A User Story
  PROJ-EEEEE | Story  | Another US   
@@ -114,11 +125,12 @@ Stories/Bugs in selected sprint :
  
 As list :
 PROJ-DDDDD,PROJ-EEEEE,PROJ-FFFFF
+Total SP in sprint : XX
 ```
 
-##### DoD Injection
+##### Apply Definition of Done (DoD)
 
-* GoJira enables you to apply a desired Definition of Done to a list of User Stories.
+* Apply a specified Definition of Done template to a list of User Stories.
 * Usage : gojira dod [ dodname ] US-XXXXX,US-YYYYY,....
 
 ```shell
@@ -126,6 +138,15 @@ $ gojira.exe dod standardstory PROJ-DDDDD,PROJ-EEEEE
  Pushing standardstory DoD for US PROJ-DDDDD ...............
  Pushing standardstory DoD for US PROJ-EEEEE ...............
 Number of US treated : 2
+```
+
+* Apply a specified Definition of Done template to an specific issue.
+* Usage : gojira dodIssue [ dodname ] PROJ-XXXXX
+
+```shell
+$ gojira.exe dod standardstory PROJ-XXXXX
+ Pushing standardstory DoD for issue PROJ-XXXXX ...............
+Subtasks created for issue PROJ-XXXXX
 ```
 
 ## Additional Links

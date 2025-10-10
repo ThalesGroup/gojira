@@ -28,6 +28,8 @@ import (
 func init() {
 	rootCmd.AddCommand(dodCmd)
 	dodCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(dodIssueCmd)
+	dodIssueCmd.AddCommand(listCmd)
 }
 
 var dodCmd = &cobra.Command{
@@ -86,6 +88,57 @@ var dodCmd = &cobra.Command{
 		}
 
 	},
+}
+
+var dodIssueCmd = &cobra.Command{
+    Use:   "dodIssue",
+    Short: "Apply Definition of Done to a specific Jira ticket.",
+    Long:  `Apply Definition of Done to a specific Jira ticket. The project is configured using 'gojira config' commands.`,
+    Args: func(cmd *cobra.Command, args []string) error {
+        if len(args) != 2 {
+            return errors.New("Requires DoD type and a single Jira issue key (e.g., PROJ-XXXXX)")
+        }
+        if isValidDoDType(args[0]) {
+            return nil
+        }
+        return fmt.Errorf("Invalid DoD type. Please use 'gojira dod list' to get all DoDs available.")
+    },
+    Example: "gojira dodIssueCmd myDodName PROJ-XXXXX",
+    Run: func(cmd *cobra.Command, args []string) {
+        username := viper.GetString("username")
+
+        // Get the ticket key from arguments
+        ticketKey := strings.Trim(strings.ToUpper(args[1]), " ")
+
+        jiraClient := loginToJira()
+
+        // Fetch the specific ticket
+        issue, _, err := jiraClient.Issue.Get(ticketKey, nil)
+        if err != nil {
+            fmt.Printf("Error: Could not find issue %s. Please verify the issue key. Error: %v\n", ticketKey, err)
+            return
+        }
+
+        fmt.Printf("Pushing %s DoD for issue %s\n", args[0], issue.Key)
+
+        // Load DoD tasks from config
+        viper.SetConfigName("dod")
+        viper.ReadInConfig()
+
+        tasks := viper.GetStringSlice(args[0])
+
+        // Restore config initial context
+        viper.SetConfigName("gojira")
+        viper.ReadInConfig()
+
+        // Create subtasks for the ticket
+        for _, summary := range tasks {
+            helpers.CreateSubTask(jiraClient, issue.Fields.Project.Key, username, issue.Key, issue.ID, summary)
+            fmt.Printf(".")
+        }
+        fmt.Printf("\n")
+        fmt.Printf("Subtasks created for issue %s\n", issue.Key)
+    },
 }
 
 func isValidDoDType(dodType string) bool {
